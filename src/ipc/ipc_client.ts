@@ -796,6 +796,47 @@ export class IpcClient {
       appId,
     });
   }
+
+  public async listCollaborators(
+    appId: number,
+  ): Promise<{ login: string; avatar_url: string; permissions: any }[]> {
+    return this.ipcRenderer.invoke("github:list-collaborators", { appId });
+  }
+
+  public async inviteCollaborator(
+    appId: number,
+    username: string,
+  ): Promise<void> {
+    await this.ipcRenderer.invoke("github:invite-collaborator", {
+      appId,
+      username,
+    });
+  }
+
+  public async removeCollaborator(
+    appId: number,
+    username: string,
+  ): Promise<void> {
+    await this.ipcRenderer.invoke("github:remove-collaborator", {
+      appId,
+      username,
+    });
+  }
+  public async createBranch(appId: number, branch: string): Promise<void> {
+    await this.ipcRenderer.invoke("github:create-branch", { appId, branch });
+  }
+
+  public async deleteBranch(appId: number, branch: string): Promise<void> {
+    await this.ipcRenderer.invoke("github:delete-branch", { appId, branch });
+  }
+
+  public async switchBranch(appId: number, branch: string): Promise<void> {
+    await this.ipcRenderer.invoke("github:switch-branch", { appId, branch });
+  }
+
+  public async listBranches(appId: number): Promise<string[]> {
+    return this.ipcRenderer.invoke("github:list-branches", { appId });
+  }
   // --- End GitHub Repo Management ---
 
   // --- Vercel Token Management ---

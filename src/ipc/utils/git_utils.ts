@@ -273,6 +273,48 @@ export async function getFileAtCommit({
   }
 }
 
+export interface GitBranchParams extends GitBaseParams {
+  branch: string;
+}
+
+export async function gitCreateBranch({
+  path,
+  branch,
+}: GitBranchParams): Promise<void> {
+  const settings = readSettings();
+  if (settings.enableNativeGit) {
+    const result = await exec(["branch", branch], path);
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr.toString());
+    }
+  } else {
+    await git.branch({
+      fs,
+      dir: path,
+      ref: branch,
+    });
+  }
+}
+
+export async function gitDeleteBranch({
+  path,
+  branch,
+}: GitBranchParams): Promise<void> {
+  const settings = readSettings();
+  if (settings.enableNativeGit) {
+    const result = await exec(["branch", "-D", branch], path);
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr.toString());
+    }
+  } else {
+    await git.deleteBranch({
+      fs,
+      dir: path,
+      ref: branch,
+    });
+  }
+}
+
 export async function gitListBranches({
   path,
 }: GitBaseParams): Promise<string[]> {

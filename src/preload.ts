@@ -134,6 +134,11 @@ const validInvokeChannels = [
   // adding app to favorite
   "add-to-favorite",
   "github:clone-repo-from-url",
+  "github:list-collaborators",
+  "github:invite-collaborator",
+  "github:remove-collaborator",
+  "github:create-branch",
+  "github:switch-branch",
   "get-latest-security-review",
   // Test-only channels
   // These should ALWAYS be guarded with IS_TEST_BUILD in the main process.

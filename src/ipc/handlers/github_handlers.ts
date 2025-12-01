@@ -1,7 +1,15 @@
 import { ipcMain, BrowserWindow, IpcMainInvokeEvent } from "electron";
 import fetch from "node-fetch"; // Use node-fetch for making HTTP requests in main process
 import { writeSettings, readSettings } from "../../main/settings";
-import { gitSetRemoteUrl, gitPush, gitClone } from "../utils/git_utils";
+import {
+  gitSetRemoteUrl,
+  gitPush,
+  gitClone,
+  gitCreateBranch,
+  gitDeleteBranch,
+  gitCheckout,
+  gitListBranches,
+} from "../utils/git_utils";
 import * as schema from "../../db/schema";
 import fs from "node:fs";
 import { getDyadAppPath } from "../../paths/paths";
@@ -25,16 +33,16 @@ const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || "Ov23liWV2HdC0RBLecWx";
 const TEST_SERVER_BASE = "http://localhost:3500";
 
 const GITHUB_DEVICE_CODE_URL = IS_TEST_BUILD
-  ? `${TEST_SERVER_BASE}/github/login/device/code`
+  ? `${TEST_SERVER_BASE} /github/login / device / code`
   : "https://github.com/login/device/code";
 const GITHUB_ACCESS_TOKEN_URL = IS_TEST_BUILD
-  ? `${TEST_SERVER_BASE}/github/login/oauth/access_token`
+  ? `${TEST_SERVER_BASE} /github/login / oauth / access_token`
   : "https://github.com/login/oauth/access_token";
 const GITHUB_API_BASE = IS_TEST_BUILD
-  ? `${TEST_SERVER_BASE}/github/api`
+  ? `${TEST_SERVER_BASE} /github/api`
   : "https://api.github.com";
 const GITHUB_GIT_BASE = IS_TEST_BUILD
-  ? `${TEST_SERVER_BASE}/github/git`
+  ? `${TEST_SERVER_BASE} /github/git`
   : "https://github.com";
 
 const GITHUB_SCOPES = "repo,user,workflow"; // Define the scopes needed
@@ -65,8 +73,8 @@ export async function getGithubUser(): Promise<GithubUser | null> {
   try {
     const accessToken = settings.githubAccessToken?.value;
     if (!accessToken) return null;
-    const res = await fetch(`${GITHUB_API_BASE}/user/emails`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+    const res = await fetch(`${GITHUB_API_BASE} /user/emails`, {
+      headers: { Authorization: `Bearer ${accessToken} ` },
     });
     if (!res.ok) return null;
     const emails = await res.json();
@@ -148,10 +156,10 @@ async function pollForAccessToken(event: IpcMainInvokeEvent) {
           break;
         case "slow_down":
           const newInterval = interval + 5;
-          logger.debug(`Slow down requested. New interval: ${newInterval}s`);
+          logger.debug(`Slow down requested.New interval: ${newInterval} s`);
           currentFlowState.interval = newInterval; // Update interval
           event.sender.send("github:flow-update", {
-            message: `GitHub asked to slow down. Retrying in ${newInterval}s...`,
+            message: `GitHub asked to slow down.Retrying in ${newInterval}s...`,
           });
           currentFlowState.timeoutId = setTimeout(
             () => pollForAccessToken(event),
@@ -174,25 +182,25 @@ async function pollForAccessToken(event: IpcMainInvokeEvent) {
           break;
         default:
           logger.error(
-            `Unknown GitHub error: ${data.error_description || data.error}`,
+            `Unknown GitHub error: ${data.error_description || data.error} `,
           );
           event.sender.send("github:flow-error", {
             error: `GitHub authorization error: ${
               data.error_description || data.error
-            }`,
+            } `,
           });
           stopPolling();
           break;
       }
     } else {
-      throw new Error(`Unknown response structure: ${JSON.stringify(data)}`);
+      throw new Error(`Unknown response structure: ${JSON.stringify(data)} `);
     }
   } catch (error) {
     logger.error("Error polling for GitHub access token:", error);
     event.sender.send("github:flow-error", {
       error: `Network or unexpected error during polling: ${
         error instanceof Error ? error.message : String(error)
-      }`,
+      } `,
     });
     stopPolling();
   }
@@ -210,13 +218,53 @@ function stopPolling() {
   }
 }
 
+async function getAppById(appId: number) {
+  return db.select().from(apps).where(eq(apps.id, appId)).get();
+}
+
+async function handleCreateBranch(
+  event: IpcMainInvokeEvent,
+  { appId, branch }: { appId: number; branch: string },
+): Promise<void> {
+  const app = await getAppById(appId);
+  if (!app) throw new Error("App not found");
+  await gitCreateBranch({ path: app.path, branch });
+}
+
+async function handleDeleteBranch(
+  event: IpcMainInvokeEvent,
+  { appId, branch }: { appId: number; branch: string },
+): Promise<void> {
+  const app = await getAppById(appId);
+  if (!app) throw new Error("App not found");
+  await gitDeleteBranch({ path: app.path, branch });
+}
+
+async function handleSwitchBranch(
+  event: IpcMainInvokeEvent,
+  { appId, branch }: { appId: number; branch: string },
+): Promise<void> {
+  const app = await getAppById(appId);
+  if (!app) throw new Error("App not found");
+  await gitCheckout({ path: app.path, ref: branch });
+}
+
+async function handleListBranches(
+  event: IpcMainInvokeEvent,
+  { appId }: { appId: number },
+): Promise<string[]> {
+  const app = await getAppById(appId);
+  if (!app) throw new Error("App not found");
+  return await gitListBranches({ path: app.path });
+}
+
 // --- IPC Handlers ---
 
 function handleStartGithubFlow(
   event: IpcMainInvokeEvent,
   args: { appId: number | null },
 ) {
-  logger.debug(`Received github:start-flow for appId: ${args.appId}`);
+  logger.debug(`Received github: start - flow for appId: ${args.appId} `);
 
   // If a flow is already in progress, maybe cancel it or send an error
   if (currentFlowState && currentFlowState.isPolling) {
@@ -261,7 +309,7 @@ function handleStartGithubFlow(
       if (!res.ok) {
         return res.json().then((errData) => {
           throw new Error(
-            `GitHub API Error: ${errData.error_description || res.statusText}`,
+            `GitHub API Error: ${errData.error_description || res.statusText} `,
           );
         });
       }
@@ -291,7 +339,7 @@ function handleStartGithubFlow(
     .catch((error) => {
       logger.error("Error initiating GitHub device flow:", error);
       event.sender.send("github:flow-error", {
-        error: `Failed to start GitHub connection: ${error.message}`,
+        error: `Failed to start GitHub connection: ${error.message} `,
       });
       stopPolling(); // Ensure polling stops on initial error
       currentFlowState = null; // Clear state on initial error
@@ -312,10 +360,10 @@ async function handleListGithubRepos(): Promise<
 
     // Fetch user's repositories
     const response = await fetch(
-      `${GITHUB_API_BASE}/user/repos?per_page=100&sort=updated`,
+      `${GITHUB_API_BASE} /user/repos ? per_page = 100 & sort=updated`,
       {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken} `,
           Accept: "application/vnd.github+json",
         },
       },
@@ -324,7 +372,7 @@ async function handleListGithubRepos(): Promise<
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(
-        `GitHub API error: ${errorData.message || response.statusText}`,
+        `GitHub API error: ${errorData.message || response.statusText} `,
       );
     }
 
@@ -355,10 +403,10 @@ async function handleGetRepoBranches(
 
     // Fetch repository branches
     const response = await fetch(
-      `${GITHUB_API_BASE}/repos/${owner}/${repo}/branches`,
+      `${GITHUB_API_BASE} /repos/${owner} /${repo}/branches`,
       {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken} `,
           Accept: "application/vnd.github+json",
         },
       },
@@ -367,7 +415,7 @@ async function handleGetRepoBranches(
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(
-        `GitHub API error: ${errorData.message || response.statusText}`,
+        `GitHub API error: ${errorData.message || response.statusText} `,
       );
     }
 
@@ -726,10 +774,144 @@ async function handleCloneRepoFromUrl(
   }
 }
 
+// --- GitHub Collaborator Handlers ---
+
+async function handleListCollaborators(
+  event: IpcMainInvokeEvent,
+  { appId }: { appId: number },
+): Promise<{ login: string; avatar_url: string; permissions: any }[]> {
+  try {
+    const settings = readSettings();
+    const accessToken = settings.githubAccessToken?.value;
+    if (!accessToken) {
+      throw new Error("Not authenticated with GitHub.");
+    }
+
+    const app = await db.query.apps.findFirst({ where: eq(apps.id, appId) });
+    if (!app || !app.githubOrg || !app.githubRepo) {
+      throw new Error("App is not linked to a GitHub repo.");
+    }
+
+    const response = await fetch(
+      `${GITHUB_API_BASE}/repos/${app.githubOrg}/${app.githubRepo}/collaborators`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/vnd.github+json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to list collaborators: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const collaborators = await response.json();
+    return collaborators.map((c: any) => ({
+      login: c.login,
+      avatar_url: c.avatar_url,
+      permissions: c.permissions,
+    }));
+  } catch (err: any) {
+    logger.error("[GitHub Handler] Failed to list collaborators:", err);
+    throw new Error(err.message || "Failed to list collaborators.");
+  }
+}
+
+async function handleInviteCollaborator(
+  event: IpcMainInvokeEvent,
+  { appId, username }: { appId: number; username: string },
+): Promise<void> {
+  try {
+    const settings = readSettings();
+    const accessToken = settings.githubAccessToken?.value;
+    if (!accessToken) {
+      throw new Error("Not authenticated with GitHub.");
+    }
+
+    const app = await db.query.apps.findFirst({ where: eq(apps.id, appId) });
+    if (!app || !app.githubOrg || !app.githubRepo) {
+      throw new Error("App is not linked to a GitHub repo.");
+    }
+
+    // GitHub API to add a collaborator (sends an invitation)
+    const response = await fetch(
+      `${GITHUB_API_BASE}/repos/${app.githubOrg}/${app.githubRepo}/collaborators/${username}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/vnd.github+json",
+        },
+        body: JSON.stringify({
+          permission: "push", // Default to write access
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(
+        data.message ||
+          `Failed to invite collaborator: ${response.status} ${response.statusText}`,
+      );
+    }
+  } catch (err: any) {
+    logger.error("[GitHub Handler] Failed to invite collaborator:", err);
+    throw new Error(err.message || "Failed to invite collaborator.");
+  }
+}
+
+async function handleRemoveCollaborator(
+  event: IpcMainInvokeEvent,
+  { appId, username }: { appId: number; username: string },
+): Promise<void> {
+  try {
+    const settings = readSettings();
+    const accessToken = settings.githubAccessToken?.value;
+    if (!accessToken) {
+      throw new Error("Not authenticated with GitHub.");
+    }
+
+    const app = await db.query.apps.findFirst({ where: eq(apps.id, appId) });
+    if (!app || !app.githubOrg || !app.githubRepo) {
+      throw new Error("App is not linked to a GitHub repo.");
+    }
+
+    const response = await fetch(
+      `${GITHUB_API_BASE}/repos/${app.githubOrg}/${app.githubRepo}/collaborators/${username}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/vnd.github+json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(
+        data.message ||
+          `Failed to remove collaborator: ${response.status} ${response.statusText}`,
+      );
+    }
+  } catch (err: any) {
+    logger.error("[GitHub Handler] Failed to remove collaborator:", err);
+    throw new Error(err.message || "Failed to remove collaborator.");
+  }
+}
+
 // --- Registration ---
 export function registerGithubHandlers() {
   ipcMain.handle("github:start-flow", handleStartGithubFlow);
   ipcMain.handle("github:list-repos", handleListGithubRepos);
+  ipcMain.handle("github:create-branch", handleCreateBranch);
+  ipcMain.handle("github:delete-branch", handleDeleteBranch);
+  ipcMain.handle("github:switch-branch", handleSwitchBranch);
+  ipcMain.handle("github:list-branches", handleListBranches);
   ipcMain.handle(
     "github:get-repo-branches",
     (event, args: { owner: string; repo: string }) =>
@@ -754,6 +936,9 @@ export function registerGithubHandlers() {
       return await handleCloneRepoFromUrl(event, args);
     },
   );
+  ipcMain.handle("github:list-collaborators", handleListCollaborators);
+  ipcMain.handle("github:invite-collaborator", handleInviteCollaborator);
+  ipcMain.handle("github:remove-collaborator", handleRemoveCollaborator);
 }
 
 export async function updateAppGithubRepo({

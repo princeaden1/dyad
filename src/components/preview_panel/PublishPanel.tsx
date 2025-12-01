@@ -2,6 +2,8 @@ import { useAtomValue } from "jotai";
 import { selectedAppIdAtom } from "@/atoms/appAtoms";
 import { useLoadApp } from "@/hooks/useLoadApp";
 import { GitHubConnector } from "@/components/GitHubConnector";
+import { CollaboratorManager } from "@/components/collaboration/CollaboratorManager";
+import { BranchManager } from "@/components/collaboration/BranchManager";
 import { VercelConnector } from "@/components/VercelConnector";
 import { PortalMigrate } from "@/components/PortalMigrate";
 import { IpcClient } from "@/ipc/ipc_client";
@@ -107,6 +109,14 @@ export const PublishPanel = () => {
             />
           </CardContent>
         </Card>
+
+        {/* Collaborators Section - Only show if GitHub is connected */}
+        {app.githubOrg && app.githubRepo && (
+          <>
+            <CollaboratorManager appId={selectedAppId} />
+            <BranchManager appId={selectedAppId} />
+          </>
+        )}
 
         {/* Vercel Section */}
         <Card>
