@@ -41,6 +41,30 @@ export async function getCurrentCommitHash({
   }
 }
 
+export async function isGitStatusClean({
+  path,
+}: {
+  path: string;
+}): Promise<boolean> {
+  const settings = readSettings();
+  if (settings.enableNativeGit) {
+    const result = await exec(["status", "--porcelain"], path);
+
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to get status: ${result.stderr}`);
+    }
+
+    // If output is empty, working directory is clean (no changes)
+    const isClean = result.stdout.trim().length === 0;
+    return isClean;
+  } else {
+    const statusMatrix = await git.statusMatrix({ fs, dir: path });
+    return statusMatrix.every(
+      (row) => row[1] === 1 && row[2] === 1 && row[3] === 1,
+    );
+  }
+}
+
 export async function gitCommit({
   path,
   message,
@@ -422,28 +446,26 @@ export async function gitSetRemoteUrl({
   if (settings.enableNativeGit) {
     // Dugite version
     try {
-      // First check if remote exists
-      const checkResult = await exec(["remote", "get-url", "origin"], path);
+      // Try to add the remote
+      const result = await exec(["remote", "add", "origin", remoteUrl], path);
 
-      if (checkResult.exitCode === 0) {
-        // Remote exists, update it
-        const result = await exec(
+      // If remote already exists, update it instead
+      if (result.exitCode !== 0 && result.stderr.includes("already exists")) {
+        const updateResult = await exec(
           ["remote", "set-url", "origin", remoteUrl],
           path,
         );
-        if (result.exitCode !== 0) {
-          throw new Error(
-            `Failed to set remote URL: ${result.stderr.toString()}`,
-          );
+
+        if (updateResult.exitCode !== 0) {
+          throw new Error(`Failed to update remote: ${updateResult.stderr}`);
         }
-      } else {
-        throw new Error(
-          `Remote does not exist: ${checkResult.stderr.toString()}`,
-        );
+      } else if (result.exitCode !== 0) {
+        // Handle other errors
+        throw new Error(`Failed to add remote: ${result.stderr}`);
       }
     } catch (error: any) {
-      logger.error("Error setting remote URL:", error);
-      throw new Error(`Error setting remote URL: ${error.message}`);
+      logger.error("Error setting up remote:", error);
+      throw error; // or handle as needed
     }
   } else {
     //isomorphic-git version
@@ -525,41 +547,16 @@ export async function gitLog({
   depth = 100_000,
 }: GitLogParams): Promise<GitCommit[]> {
   const settings = readSettings();
+
   if (settings.enableNativeGit) {
     try {
-      // Format: %H = commit hash, %s = subject, %at = author timestamp
-      const result = await exec(
-        ["log", "--format=%H%n%s%n%at%n---END---", "-n", depth.toString()],
-        path,
-      );
-      const output = result.stdout.trim();
-      if (!output) {
-        return [];
-      }
-      const commits = output
-        .split("---END---\n")
-        .filter((block) => block.trim());
-      return commits.map((block) => {
-        const lines = block.trim().split("\n");
-        const oid = lines[0];
-        const message = lines[1] || "";
-        const timestamp = parseInt(lines[2] || "0", 10);
-
-        return {
-          oid,
-          commit: {
-            message,
-            author: {
-              timestamp,
-            },
-          },
-        };
-      });
+      return await gitLogNative(path, depth);
     } catch (error) {
-      logger.warn(`Git log failed: ${error}`);
+      logger.warn(`Git log (native) failed: ${error}`);
       return [];
     }
   } else {
+    // isomorphic-git fallback: this already returns the same structure
     return await git.log({
       fs,
       dir: path,
@@ -595,4 +592,60 @@ export async function gitIsIgnored({
       filepath,
     });
   }
+}
+
+export async function gitLogNative(
+  path: string,
+  depth = 100_000,
+): Promise<GitCommit[]> {
+  // 1) Get the commit OIDs (like isomorphic-git log order)
+  const revArgs = ["rev-list", "--max-count", String(depth), "HEAD"];
+  const revResult = await exec(revArgs, path);
+
+  if (revResult.exitCode !== 0) {
+    throw new Error(revResult.stderr.toString());
+  }
+
+  const oids = revResult.stdout.toString().trim().split("\n").filter(Boolean);
+  const entries: GitCommit[] = [];
+
+  // 2) For each OID, get the commit object and parse author.timestamp + message
+  for (const oid of oids) {
+    const catArgs = ["cat-file", "-p", oid];
+    const catResult = await exec(catArgs, path);
+    if (catResult.exitCode !== 0) continue;
+
+    const raw = catResult.stdout.toString();
+
+    // Split headers and commit message
+    const sepIndex = raw.indexOf("\n\n");
+    const headerPart = sepIndex === -1 ? raw : raw.slice(0, sepIndex);
+    const messagePart = sepIndex === -1 ? "" : raw.slice(sepIndex + 2); // includes trailing \n
+
+    const headerLines = headerPart.split("\n");
+
+    let authorTimestamp = 0;
+
+    for (const line of headerLines) {
+      if (line.startsWith("author ")) {
+        // Example: "author Name <email> 1764892838 +0000"
+        const m = /^author (.+) <(.+)> (\d+) ([+-]\d{4})$/.exec(line);
+        if (m) {
+          const ts = m[3];
+          authorTimestamp = Number(ts);
+        }
+        break;
+      }
+    }
+    entries.push({
+      oid,
+      commit: {
+        message: messagePart,
+        author: {
+          timestamp: authorTimestamp,
+        },
+      },
+    });
+  }
+  return entries;
 }

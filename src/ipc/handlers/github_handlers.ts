@@ -9,6 +9,9 @@ import {
   gitDeleteBranch,
   gitCheckout,
   gitListBranches,
+  gitInit,
+  gitAddAll,
+  gitCommit,
 } from "../utils/git_utils";
 import * as schema from "../../db/schema";
 import fs from "node:fs";
@@ -33,16 +36,16 @@ const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || "Ov23liWV2HdC0RBLecWx";
 const TEST_SERVER_BASE = "http://localhost:3500";
 
 const GITHUB_DEVICE_CODE_URL = IS_TEST_BUILD
-  ? `${TEST_SERVER_BASE} /github/login / device / code`
+  ? `${TEST_SERVER_BASE}/github/login/device/code`
   : "https://github.com/login/device/code";
 const GITHUB_ACCESS_TOKEN_URL = IS_TEST_BUILD
-  ? `${TEST_SERVER_BASE} /github/login / oauth / access_token`
+  ? `${TEST_SERVER_BASE}/github/login/oauth/access_token`
   : "https://github.com/login/oauth/access_token";
 const GITHUB_API_BASE = IS_TEST_BUILD
-  ? `${TEST_SERVER_BASE} /github/api`
+  ? `${TEST_SERVER_BASE}/github/api`
   : "https://api.github.com";
 const GITHUB_GIT_BASE = IS_TEST_BUILD
-  ? `${TEST_SERVER_BASE} /github/git`
+  ? `${TEST_SERVER_BASE}/github/git`
   : "https://github.com";
 
 const GITHUB_SCOPES = "repo,user,workflow"; // Define the scopes needed
@@ -73,8 +76,8 @@ export async function getGithubUser(): Promise<GithubUser | null> {
   try {
     const accessToken = settings.githubAccessToken?.value;
     if (!accessToken) return null;
-    const res = await fetch(`${GITHUB_API_BASE} /user/emails`, {
-      headers: { Authorization: `Bearer ${accessToken} ` },
+    const res = await fetch(`${GITHUB_API_BASE}/user/emails`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
     const emails = await res.json();
@@ -360,10 +363,10 @@ async function handleListGithubRepos(): Promise<
 
     // Fetch user's repositories
     const response = await fetch(
-      `${GITHUB_API_BASE} /user/repos ? per_page = 100 & sort=updated`,
+      `${GITHUB_API_BASE}/user/repos?per_page=100&sort=updated`,
       {
         headers: {
-          Authorization: `Bearer ${accessToken} `,
+          Authorization: `Bearer ${accessToken}`,
           Accept: "application/vnd.github+json",
         },
       },
@@ -403,10 +406,10 @@ async function handleGetRepoBranches(
 
     // Fetch repository branches
     const response = await fetch(
-      `${GITHUB_API_BASE} /repos/${owner} /${repo}/branches`,
+      `${GITHUB_API_BASE}/repos/${owner}/${repo}/branches`,
       {
         headers: {
-          Authorization: `Bearer ${accessToken} `,
+          Authorization: `Bearer ${accessToken}`,
           Accept: "application/vnd.github+json",
         },
       },
@@ -551,6 +554,31 @@ async function handleCreateRepo(
   }
   // Store org, repo, and branch in the app's DB row (apps table)
   await updateAppGithubRepo({ appId, org: owner, repo, branch });
+
+  // Initialize local git repo if needed
+  const app = await getAppById(appId);
+  if (app) {
+    const appPath = getDyadAppPath(app.path);
+    if (!fs.existsSync(path.join(appPath, ".git"))) {
+      await gitInit({ path: appPath, ref: "main" });
+      await gitAddAll({ path: appPath });
+      await gitCommit({ path: appPath, message: "Initial commit" });
+    }
+
+    // Set remote URL
+    const remoteUrl = IS_TEST_BUILD
+      ? `${GITHUB_GIT_BASE}/${owner}/${repo}.git`
+      : `https://${accessToken}:x-oauth-basic@github.com/${owner}/${repo}.git`;
+
+    await gitSetRemoteUrl({ path: appPath, remoteUrl });
+
+    // Push to the new repo
+    await gitPush({
+      path: appPath,
+      branch: "main",
+      accessToken,
+    });
+  }
 }
 
 // --- GitHub Connect to Existing Repo Handler ---
@@ -591,6 +619,24 @@ async function handleConnectToExistingRepo(
 
     // Store org, repo, and branch in the app's DB row
     await updateAppGithubRepo({ appId, org: owner, repo, branch });
+
+    // Initialize local git repo if needed
+    const app = await getAppById(appId);
+    if (app) {
+      const appPath = getDyadAppPath(app.path);
+      if (!fs.existsSync(path.join(appPath, ".git"))) {
+        await gitInit({ path: appPath, ref: "main" });
+        // We don't auto-commit here as it might conflict with existing repo content
+        // But we do need to ensure it's a git repo for BranchManager to work
+      }
+
+      // Set remote URL
+      const remoteUrl = IS_TEST_BUILD
+        ? `${GITHUB_GIT_BASE}/${owner}/${repo}.git`
+        : `https://${accessToken}:x-oauth-basic@github.com/${owner}/${repo}.git`;
+
+      await gitSetRemoteUrl({ path: appPath, remoteUrl });
+    }
   } catch (err: any) {
     logger.error("[GitHub Handler] Failed to connect to existing repo:", err);
     throw new Error(err.message || "Failed to connect to existing repository.");
