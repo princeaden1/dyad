@@ -71,6 +71,7 @@ export const MessagesList = forwardRef<HTMLDivElement, MessagesListProps>(
                 key={index}
                 message={message}
                 isLastMessage={index === messages.length - 1}
+                chatId={selectedChatId}
               />
             ))
           : !renderSetupBanner() && (

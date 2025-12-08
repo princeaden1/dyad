@@ -395,6 +395,7 @@ export class IpcClient {
       onEnd: (response: ChatResponseEnd) => void;
       onError: (error: string) => void;
       onProblems?: (problems: ChatProblemsEvent) => void;
+      editMessageId?: number;
     },
   ): void {
     const {
@@ -405,6 +406,7 @@ export class IpcClient {
       onUpdate,
       onEnd,
       onError,
+      editMessageId,
     } = options;
     this.chatStreams.set(chatId, { onUpdate, onEnd, onError });
 
@@ -443,6 +445,7 @@ export class IpcClient {
               redo,
               selectedComponents,
               attachments: fileDataArray,
+              editMessageId,
             })
             .catch((err) => {
               console.error("Error streaming message:", err);
@@ -465,6 +468,7 @@ export class IpcClient {
           chatId,
           redo,
           selectedComponents,
+          editMessageId,
         })
         .catch((err) => {
           console.error("Error streaming message:", err);

@@ -42,6 +42,7 @@ export interface ChatStreamParams {
     attachmentType: "upload-to-codebase" | "chat-context"; // FileAttachment type
   }>;
   selectedComponents?: ComponentSelection[];
+  editMessageId?: number;
 }
 
 export interface ChatResponseEnd {
