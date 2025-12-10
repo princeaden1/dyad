@@ -90,6 +90,7 @@ const validInvokeChannels = [
   "delete-chat",
   "update-chat",
   "delete-messages",
+  "update-message",
   "start-chat-stream",
   "does-release-note-exist",
   "import-app",

@@ -172,4 +172,22 @@ export function registerChatHandlers() {
       return uniqueChats;
     },
   );
+  handle(
+    "update-message",
+    async (
+      _,
+      { messageId, newContent }: { messageId: number; newContent: string },
+    ) => {
+      await db
+        .update(messages)
+        .set({ content: newContent })
+        .where(eq(messages.id, messageId));
+      logger.info(
+        "Updated message:",
+        messageId,
+        "with new content length:",
+        newContent.length,
+      );
+    },
+  );
 }

@@ -85,6 +85,10 @@ export interface Message {
   requestId?: string | null;
   totalTokens?: number | null;
 }
+export interface UpdateMessageRequest {
+  messageId: number;
+  newContent: string;
+}
 
 export interface Chat {
   id: number;

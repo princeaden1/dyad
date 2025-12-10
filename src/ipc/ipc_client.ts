@@ -70,6 +70,7 @@ import type {
   SupabaseBranch,
   SetSupabaseAppProjectParams,
   SelectNodeFolderResult,
+  UpdateMessageRequest,
 } from "./ipc_types";
 import type { Template } from "../shared/templates";
 import type {
@@ -1326,5 +1327,13 @@ export class IpcClient {
 
   public cancelHelpChat(sessionId: string): void {
     this.ipcRenderer.invoke("help:chat:cancel", sessionId).catch(() => {});
+  }
+  public async updateMessage(params: UpdateMessageRequest): Promise<void> {
+    try {
+      await this.ipcRenderer.invoke("update-message", params);
+    } catch (error) {
+      showError(error);
+      throw error;
+    }
   }
 }
