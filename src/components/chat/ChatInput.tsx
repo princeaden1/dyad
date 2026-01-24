@@ -88,6 +88,9 @@ import { useCountTokens } from "@/hooks/useCountTokens";
 import { useChats } from "@/hooks/useChats";
 import { useRouter } from "@tanstack/react-router";
 import { showError as showErrorToast } from "@/lib/toast";
+import { useVoiceInput } from "@/hooks/useAudioRecorder";
+import { VoiceWaveform } from "./VoiceWaveform";
+import { VoiceInputButton } from "./VoiceInputButton";
 
 const showTokenBarAtom = atom(false);
 
@@ -195,6 +198,15 @@ export function ChatInput({ chatId }: { chatId?: number }) {
     shouldShowContextLimitBanner({
       totalTokens: tokenCountResult.actualMaxTokens,
       contextWindow: tokenCountResult.contextWindow,
+    });
+
+  const { isTranscribing, isRecording, analyser, handleMicClick } =
+    useVoiceInput({
+      appendText: (text) => {
+        if (text) {
+          setInputValue((prev) => (prev ? `${prev} ${text}` : text));
+        }
+      },
     });
 
   useEffect(() => {
@@ -507,16 +519,20 @@ export function ChatInput({ chatId }: { chatId?: number }) {
           <DragDropOverlay isDraggingOver={isDraggingOver} />
 
           <div className="flex items-start space-x-2 ">
-            <LexicalChatInput
-              value={inputValue}
-              onChange={setInputValue}
-              onSubmit={handleSubmit}
-              onPaste={handlePaste}
-              placeholder="Ask Dyad to build..."
-              excludeCurrentApp={true}
-              disableSendButton={disableSendButton}
-              messageHistory={userMessageHistory}
-            />
+            {isRecording ? (
+              <VoiceWaveform analyser={analyser} />
+            ) : (
+              <LexicalChatInput
+                value={inputValue}
+                onChange={setInputValue}
+                onSubmit={handleSubmit}
+                onPaste={handlePaste}
+                placeholder="Ask Dyad to build..."
+                excludeCurrentApp={true}
+                disableSendButton={disableSendButton}
+                messageHistory={userMessageHistory}
+              />
+            )}
 
             {isStreaming ? (
               <Tooltip>
@@ -534,24 +550,31 @@ export function ChatInput({ chatId }: { chatId?: number }) {
                 <TooltipContent>Cancel generation</TooltipContent>
               </Tooltip>
             ) : (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      onClick={handleSubmit}
-                      disabled={
-                        (!inputValue.trim() && attachments.length === 0) ||
-                        disableSendButton
-                      }
-                      aria-label="Send message"
-                      className="px-2 py-2 mt-1 mr-1 hover:bg-(--background-darkest) text-(--sidebar-accent-fg) rounded-lg disabled:opacity-50"
-                    />
-                  }
-                >
-                  <SendHorizontalIcon size={20} />
-                </TooltipTrigger>
-                <TooltipContent>Send message</TooltipContent>
-              </Tooltip>
+              <div className="flex items-center mt-1 mr-1">
+                <VoiceInputButton
+                  isRecording={isRecording}
+                  isTranscribing={isTranscribing}
+                  onClick={handleMicClick}
+                />
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        onClick={handleSubmit}
+                        disabled={
+                          (!inputValue.trim() && attachments.length === 0) ||
+                          disableSendButton
+                        }
+                        aria-label="Send message"
+                        className="px-2 py-2 hover:bg-(--background-darkest) text-(--sidebar-accent-fg) rounded-lg disabled:opacity-50"
+                      />
+                    }
+                  >
+                    <SendHorizontalIcon size={20} />
+                  </TooltipTrigger>
+                  <TooltipContent>Send message</TooltipContent>
+                </Tooltip>
+              </div>
             )}
           </div>
           <div className="pl-2 pr-1 flex items-center justify-between pb-2">
