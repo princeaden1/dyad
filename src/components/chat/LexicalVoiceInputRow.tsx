@@ -5,6 +5,7 @@ import type {
   SetStateAction,
 } from "react";
 import { useVoiceInput } from "@/hooks/useAudioRecorder";
+import { showError } from "@/lib/toast";
 import { VoiceWaveform } from "./VoiceWaveform";
 import { VoiceInputButton } from "./VoiceInputButton";
 import { LexicalChatInput } from "./LexicalChatInput";
@@ -45,6 +46,9 @@ export function LexicalVoiceInputRow({
           setValue((prev) => (prev ? `${prev} ${text}` : text));
         }
       },
+      onError: (message) => {
+        showError(message);
+      },
     });
   const isVoiceBusy = isRecording || isTranscribing;
   const isSendDisabled = disableSend || isVoiceBusy;
@@ -60,6 +64,7 @@ export function LexicalVoiceInputRow({
           onSubmit={onSubmit}
           onPaste={onPaste}
           placeholder={placeholder}
+          disabled={isStreaming}
           excludeCurrentApp={excludeCurrentApp}
           disableSendButton={disableLexicalSendButton || isVoiceBusy}
           messageHistory={messageHistory}
