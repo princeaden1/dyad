@@ -67,7 +67,7 @@ export function LexicalVoiceInputRow({
           disabled={isStreaming}
           excludeCurrentApp={excludeCurrentApp}
           disableSendButton={disableLexicalSendButton || isVoiceBusy}
-          messageHistory={messageHistory}
+          messageHistory={messageHistory ?? []}
         />
       )}
 

@@ -197,7 +197,6 @@ export function ChatInput({ chatId }: { chatId?: number }) {
       contextWindow: tokenCountResult.contextWindow,
     });
 
-
   useEffect(() => {
     if (error) {
       setShowError(true);

@@ -22,11 +22,11 @@ export function useAudioRecorder(
 ) {
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const analyserRef = useRef<AnalyserNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const isMountedRef = useRef(true);
   const isStartingRef = useRef(false);
@@ -53,7 +53,7 @@ export function useAudioRecorder(
         audioContextRef.current.close();
         audioContextRef.current = null;
       }
-      analyserRef.current = null;
+      setAnalyser(null);
     };
   }, []);
 
@@ -72,7 +72,7 @@ export function useAudioRecorder(
       analyser.fftSize = 256;
       source.connect(analyser);
 
-      analyserRef.current = analyser;
+      setAnalyser(analyser);
       audioContextRef.current = audioContext;
 
       const mediaRecorder = new MediaRecorder(stream);
@@ -100,11 +100,10 @@ export function useAudioRecorder(
           audioContextRef.current.close();
           audioContextRef.current = null;
         }
-        analyserRef.current = null;
+        setAnalyser(null);
       };
 
       const recorderAudioContext = audioContext;
-      const recorderAnalyser = analyser;
 
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
@@ -125,9 +124,7 @@ export function useAudioRecorder(
           audioContextRef.current.close();
           audioContextRef.current = null;
         }
-        if (analyserRef.current === recorderAnalyser) {
-          analyserRef.current = null;
-        }
+        setAnalyser(null);
       };
 
       mediaRecorder.start();
@@ -135,6 +132,16 @@ export function useAudioRecorder(
       setAudioBlob(null);
     } catch (err) {
       logger.error("Error starting recording:", err);
+      // Cleanup any resources acquired before the error
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+      setAnalyser(null);
       throw err;
     } finally {
       isStartingRef.current = false;
@@ -151,7 +158,6 @@ export function useAudioRecorder(
           logger.warn("Failed to stop media recorder", error);
         }
       }
-      setIsRecording(false);
       isStartingRef.current = false;
     }
   }, [isRecording]);
@@ -161,7 +167,7 @@ export function useAudioRecorder(
     audioBlob,
     startRecording,
     stopRecording,
-    analyser: analyserRef.current,
+    analyser,
   };
 }
 

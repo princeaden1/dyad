@@ -227,36 +227,6 @@ export function createDyadEngine(
   return provider;
 }
 
-// Module-level map to track request ID attempts across multiple calls
-// Size is limited to prevent unbounded memory growth
-const transcriptionRequestIdAttempts = new Map<string, number>();
-const MAX_TRACKED_REQUESTS = 500; // Limit to prevent memory accumulation
-
-/**
- * Tracks and increments attempt count for a request ID.
- * Automatically removes oldest entries when map exceeds MAX_TRACKED_REQUESTS.
- */
-function trackRequestAttempt(requestId: string): number {
-  const currentAttempt =
-    (transcriptionRequestIdAttempts.get(requestId) || 0) + 1;
-  transcriptionRequestIdAttempts.set(requestId, currentAttempt);
-
-  // Cleanup: if map exceeds max size, remove the oldest (first) entries
-  // Maps maintain insertion order, so first entries are oldest
-  if (transcriptionRequestIdAttempts.size > MAX_TRACKED_REQUESTS) {
-    const entriesToRemove =
-      transcriptionRequestIdAttempts.size - MAX_TRACKED_REQUESTS;
-    let removed = 0;
-    for (const key of transcriptionRequestIdAttempts.keys()) {
-      if (removed >= entriesToRemove) break;
-      transcriptionRequestIdAttempts.delete(key);
-      removed++;
-    }
-  }
-
-  return currentAttempt;
-}
-
 export async function transcribeWithDyadEngine(
   audioBuffer: Buffer,
   filename: string,
@@ -271,15 +241,17 @@ export async function transcribeWithDyadEngine(
   });
   logger.info("transcribing with dyad engine with baseURL", baseURL);
 
-  // Track and modify requestId with attempt number
-  let modifiedRequestId = requestId;
-  if (requestId) {
-    const currentAttempt = trackRequestAttempt(requestId);
-    modifiedRequestId = `${requestId}:attempt-${currentAttempt}`;
-  }
-
   const formData = new FormData();
-  const blob = new Blob([audioBuffer as any]);
+  const mimeType = filename.endsWith(".webm")
+    ? "audio/webm"
+    : filename.endsWith(".mp3")
+      ? "audio/mpeg"
+      : filename.endsWith(".wav")
+        ? "audio/wav"
+        : filename.endsWith(".m4a")
+          ? "audio/mp4"
+          : "audio/webm";
+  const blob = new Blob([audioBuffer as any], { type: mimeType });
   formData.append("file", blob, filename);
   formData.append("model", "whisper-1");
 
@@ -288,7 +260,7 @@ export async function transcribeWithDyadEngine(
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
-      "X-Dyad-Request-Id": modifiedRequestId,
+      "X-Dyad-Request-Id": requestId,
       ...options.headers,
     },
     body: formData,
@@ -301,8 +273,5 @@ export async function transcribeWithDyadEngine(
     );
   }
   const data = (await response.json()) as { text: string };
-  if (requestId) {
-    transcriptionRequestIdAttempts.delete(requestId);
-  }
   return data.text;
 }

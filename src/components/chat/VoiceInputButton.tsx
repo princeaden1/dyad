@@ -4,7 +4,6 @@ import { useSettings } from "@/hooks/useSettings";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
@@ -48,30 +47,28 @@ export function VoiceInputButton({
         ? "Start voice input"
         : "Pro feature only";
 
-  const button = (
-    <button
-      data-testid="voice-input-button"
-      onClick={proModeTogglable || isRecording ? onClick : undefined}
-      className={className}
-      title={title}
-      disabled={isDisabled}
-    >
-      {isRecording ? (
-        <Square size={20} fill="currentColor" />
-      ) : isTranscribing ? (
-        <Loader size={20} className="animate-spin" />
-      ) : (
-        <Mic size={20} />
-      )}
-    </button>
-  );
-
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
-        <TooltipContent>{title}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            data-testid="voice-input-button"
+            onClick={proModeTogglable || isRecording ? onClick : undefined}
+            className={className}
+            aria-label={title}
+            disabled={isDisabled}
+          />
+        }
+      >
+        {isRecording ? (
+          <Square size={20} fill="currentColor" />
+        ) : isTranscribing ? (
+          <Loader size={20} className="animate-spin" />
+        ) : (
+          <Mic size={20} />
+        )}
+      </TooltipTrigger>
+      <TooltipContent>{title}</TooltipContent>
+    </Tooltip>
   );
 }
